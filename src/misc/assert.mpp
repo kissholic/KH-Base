@@ -1,0 +1,19 @@
+/*
+ * File: assert.mpp
+ * Author: kissholic
+ * Copyright (c) 2025 kissholic. All wrongs reserved.
+ */
+
+export module khbase:misc.assert;
+import std;
+
+export namespace kh {
+
+void rt_assert(bool cond, const char* msg = "") noexcept {
+	if (!cond) {
+		std::cerr << "Assertion failed: " << msg << std::endl;
+		std::abort();
+	}
+}
+
+} // namespace kh

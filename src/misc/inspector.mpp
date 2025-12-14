@@ -1,0 +1,42 @@
+/*
+ * File: inspector.mpp
+ * Author: kissholic
+ * Copyright (c) 2025 kissholic. All wrongs reserved.
+ */
+
+export module khbase:misc.inspector;
+import :traits;
+
+namespace {
+
+template <typename Cls, typename T, int I>
+struct storage {
+	inline static T Cls::* ptr;
+};
+
+} // namespace
+
+
+export namespace kh {
+
+template<auto M, int I = 0>
+class inspector {
+	struct register_ptr {
+		register_ptr() {
+			using Cls_t = typename trait_class_member<decltype(M)>::class_t;
+			using Mem_t = typename trait_class_member<decltype(M)>::member_t;
+
+			storage<Cls_t, Mem_t, I>::ptr = M;
+		}
+	};
+
+	inline static register_ptr rp;
+};
+
+template <typename T, typename Cls, int I = 0>
+T& access_obj(Cls& obj)  noexcept {
+	return obj.*storage<Cls, T, I>::ptr;
+}
+
+
+} // namespace kh

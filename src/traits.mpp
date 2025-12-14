@@ -1,0 +1,22 @@
+/*
+ * File: traits.mpp
+ * Author: kissholic
+ * Copyright (c) 2025 kissholic. All wrongs reserved.
+ */
+
+export module khbase:traits;
+
+
+export namespace kh {
+
+template <typename T>
+class trait_class_member;
+
+template <typename Cls, typename T>
+class trait_class_member<T Cls::*> {
+public:
+	using class_t = Cls;
+	using member_t = T;
+};
+
+} // namespace kh

@@ -1,0 +1,10 @@
+/*
+ * File: misc.mpp
+ * Author: kissholic
+ * Copyright (c) 2025 kissholic. All wrongs reserved.
+ */
+
+export module khbase:misc;
+export import :misc.assert;
+export import :misc.inspector;
+export import :misc.defer;

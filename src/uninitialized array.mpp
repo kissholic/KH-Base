@@ -1,0 +1,136 @@
+/*
+ * File: uninitialized array.mpp
+ * Author: kissholic
+ * Copyright (c) 2025 kissholic. All wrongs reserved.
+ */
+
+export module khbase:memory.uninitialized_array;
+import :misc.assert;
+import std;
+
+
+export namespace kh {
+
+// Something like std::inplace_vector
+template <std::default_initializable T, std::size_t N>
+class uninitialized_array {
+	static_assert(N > 0, "N must be greater than 0");
+	constexpr static std::size_t pool_size = N * sizeof(T);
+
+	template <typename U>
+	class iter {
+	public:
+		iter(U ptr) : m_ptr(ptr) {}
+
+		iter& operator++() noexcept {
+			++m_ptr;
+			return *this;
+		}
+
+		iter operator++(int) noexcept {
+			iter tmp = *this;
+			++m_ptr;
+			return tmp;
+		}
+
+		bool operator==(const iter& other) const noexcept {
+			return m_ptr == other.m_ptr;
+		}
+
+		bool operator!=(const iter& other) const noexcept {
+			return !(*this == other);
+		}
+
+		auto operator*() const noexcept ->decltype(auto) {
+			return *m_ptr;
+		}
+
+		U operator->() const noexcept {
+			return m_ptr;
+		}
+
+	private:
+		U m_ptr;
+	};
+
+public:
+	using value_type = T;
+	using pointer = T*;
+	using const_pointer = const T*;
+	using reference_type = T&;
+	using const_reference_type = const T&;
+	using difference_type = std::ptrdiff_t;
+	using size_type = std::size_t;
+	using iterator = iter<pointer>;
+	using const_iterator = iter<const_pointer>;
+
+	uninitialized_array() : m_size(0) {}
+
+	~uninitialized_array() = default;
+
+	auto at(this auto&& self, size_type index) noexcept -> decltype(auto) {
+		return self.data()[index];
+	}
+
+	auto operator[](this auto&& self, size_type index) noexcept -> decltype(auto) {
+		rt_assert(index < N, "index out of range");
+		return self.at(index);
+	}
+
+	auto front(this auto&& self) noexcept -> decltype(auto) {
+		return self.at(0);
+	}
+
+	auto back(this auto&& self) noexcept -> decltype(auto) {
+		return self.at(self.m_size - 1);
+	}
+
+	T* data() noexcept {
+		return reinterpret_cast<T*>(pool);
+	}
+
+	const T* data() const noexcept {
+		return reinterpret_cast<const T*>(pool);
+	}
+
+	bool empty() const noexcept {
+		return m_size == 0;
+	}
+
+	size_type size() const noexcept { return m_size; }
+
+	constexpr static size_type max_size() noexcept { return N; }
+	constexpr static size_type capacity() noexcept { return N; }
+
+	iterator begin() noexcept { return iterator(data()); }
+	const_iterator begin() const noexcept { return const_iterator(data()); }
+	const_iterator cbegin() const noexcept { return const_iterator(data()); }
+
+	iterator end() noexcept { return iterator(data() + m_size); }
+	const_iterator end() const noexcept { return const_iterator(data() + m_size); }
+	const_iterator cend() const noexcept { return const_iterator(data() + m_size); }
+
+	iterator insert(const_iterator pos, const T& value) noexcept {		
+		rt_assert(m_size < N, "uninitialized_array is full");
+
+		if constexpr (std::is_trivially_copyable_v<T>)
+			std::copy_backward(pos, end(), pos + 1);
+		else {
+			std::construct_at(end() - 1);
+			std::move_backward(pos, end() - 1, end());
+		}
+		
+		*pos = value;
+		++m_size;
+		return pos;
+	}
+
+	// WIP Other methods
+
+private:
+	size_type m_size;
+	std::byte pool[pool_size];
+};
+
+
+} // namespace kh

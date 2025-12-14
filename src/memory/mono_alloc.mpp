@@ -1,0 +1,35 @@
+/*
+ * File: mono_alloc.mpp
+ * Author: kissholic
+ * Copyright (c) 2025 kissholic. All wrongs reserved.
+ */
+
+export module khbase:memory.mono;
+import std;
+
+
+export namespace kh {
+
+template <std::size_t N, typename T = char>
+class mono_allocator {
+	constexpr static std::size_t pool_size = N * sizeof(T);
+
+public:
+	using allocator_type		= mono_allocator;
+	using value_type			= T;
+	using pointer				= T*;
+	using const_pointer			= const T*;
+	using void_pointer			= void*;
+	using const_void_pointer	= const void*;
+	using difference_type		= std::ptrdiff_t;
+	using size_type				= std::size_t;
+
+	mono_allocator() = default;
+
+
+private:
+	std::array<T, pool_size> pool;
+};
+
+
+} // namespace kh

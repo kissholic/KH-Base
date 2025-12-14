@@ -1,0 +1,13 @@
+/*
+ * File: kh.mpp
+ * Author: kissholic
+ * Copyright (c) 2025 kissholic. All wrongs reserved.
+ */
+
+export module khbase;
+
+export import :convert;
+export import :types;
+export import :misc;
+
+

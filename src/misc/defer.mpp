@@ -1,0 +1,21 @@
+/*
+ * File: defer.mpp
+ * Author: kissholic
+ * Copyright (c) 2025 kissholic. All wrongs reserved.
+ */
+
+export module khbase:misc.defer;
+import std;
+
+export namespace kh {
+
+class defer {
+public:
+	defer(std::function<void()> func) : m_func(std::move(func)) {}
+	~defer() { m_func(); }
+
+private:
+	std::function<void()> m_func;
+};
+
+} // namespace kh

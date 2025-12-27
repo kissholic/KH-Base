@@ -6,4 +6,5 @@
 
 export module khbase:memory;
 
-
+export import :memory.mono_alloc;
+export import :memory.uninitialized_array;

@@ -66,7 +66,9 @@ public:
 
 	uninitialized_array() : m_size(0) {}
 
-	~uninitialized_array() = default;
+	~uninitialized_array() {
+		std::ranges::destroy_n(data(), m_size);
+	}
 
 	auto at(this auto&& self, size_type index) noexcept -> decltype(auto) {
 		return self.data()[index];
@@ -85,11 +87,11 @@ public:
 		return self.at(self.m_size - 1);
 	}
 
-	T* data() noexcept {
+	T* data() & noexcept {
 		return reinterpret_cast<T*>(pool);
 	}
 
-	const T* data() const noexcept {
+	const T* data() const & noexcept {
 		return reinterpret_cast<const T*>(pool);
 	}
 
@@ -102,30 +104,53 @@ public:
 	constexpr static size_type max_size() noexcept { return N; }
 	constexpr static size_type capacity() noexcept { return N; }
 
-	iterator begin() noexcept { return iterator(data()); }
-	const_iterator begin() const noexcept { return const_iterator(data()); }
-	const_iterator cbegin() const noexcept { return const_iterator(data()); }
+	iterator begin() & noexcept { return iterator(data()); }
+	const_iterator begin() const & noexcept { return const_iterator(data()); }
+	const_iterator cbegin() const & noexcept { return const_iterator(data()); }
+	iterator end() & noexcept { return iterator(data() + m_size); }
+	const_iterator end() const & noexcept { return const_iterator(data() + m_size); }
+	const_iterator cend() const & noexcept { return const_iterator(data() + m_size); }
 
-	iterator end() noexcept { return iterator(data() + m_size); }
-	const_iterator end() const noexcept { return const_iterator(data() + m_size); }
-	const_iterator cend() const noexcept { return const_iterator(data() + m_size); }
+	iterator insert(const_iterator pos, const T& value) & noexcept {
+		auto new_pos = uninitialized_insert(pos, 1);
+		*new_pos = value;
+		return new_pos;
+	}
 
-	iterator insert(const_iterator pos, const T& value) noexcept {		
-		rt_assert(m_size < N, "uninitialized_array is full");
+	template <typename... Args>
+	iterator emplace(const_iterator pos, Args&&... args) & noexcept {
+		auto new_pos = uninitialized_insert(pos, 1);
+		std::construct_at(new_pos, std::forward<Args>(args)...);
+		return new_pos;
+	}
+
+	template <typename... Args>
+	reference_type emplace_back(Args&&... args) & noexcept {
+		return *emplace(end(), std::forward<Args>(args)...);
+	}
+
+	reference_type push_back(const T& value) & noexcept {
+		return *insert(end(), value);
+	}
+
+	reference_type push_back(T&& value) & noexcept {
+		return *insert(end(), std::move(value));
+	}
+
+	iterator uninitialized_insert(const_iterator pos, size_type count) & noexcept {
+		size_type available = N - m_size;
+		rt_assert(available >= count, "uninitialized_array is full");
 
 		if constexpr (std::is_trivially_copyable_v<T>)
-			std::copy_backward(pos, end(), pos + 1);
+			std::copy_backward(pos, end(), pos + count);
 		else {
 			std::construct_at(end() - 1);
 			std::move_backward(pos, end() - 1, end());
 		}
-		
-		*pos = value;
-		++m_size;
+
+		m_size += count;
 		return pos;
 	}
-
-	// WIP Other methods
 
 private:
 	size_type m_size;

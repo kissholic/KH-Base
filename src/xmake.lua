@@ -3,8 +3,8 @@
 target("khbase")
 	set_kind("static")
 	set_warnings("all", "extra", "error")
-	add_files("./**.mpp")
-	add_files("./**.mpp", {public = true})
+	add_files("./*.mpp", "memory/*.mpp", "misc/*.mpp")
+	add_files("./*.mpp", "memory/*.mpp", "misc/*.mpp", {public = true})
 
 	set_languages("c++23")
 	set_exceptions("no-cxx")

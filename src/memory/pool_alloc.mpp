@@ -1,0 +1,203 @@
+/*
+ * File: pool_alloc.mpp
+ * Author: kissholic
+ * Copyright (c) 2025 kissholic. All wrongs reserved.
+ */
+
+export module khbase:memory.pool_alloc;
+import :convert;
+import :misc.assert;
+import :types;
+import std;
+
+
+namespace kh {
+namespace {
+
+constexpr int POOL_SIZES[] = {
+	16,		32,		64,		96,		128,	160,	192,	224,
+	256, 	320, 	384, 	448, 	512,	640, 	768, 	896,
+	1024,	1280,	1536,	1792, 	2048,	2560,	3072,	3584,
+	4096, 	5120,	6144,	7168,	8192,	10240,	12288,	14336,
+	16384,	20480,
+};
+constexpr std::size_t POOL_NUM		= sizeof(POOL_SIZES) / sizeof(POOL_SIZES[0]);
+constexpr auto MAX_POOL_SIZE 		= POOL_SIZES[POOL_NUM - 1];
+
+constexpr auto SIZE_TO_POOL_IDX = []() constexpr {
+	std::array<int, MAX_POOL_SIZE + 1> idx{};
+	int pre = 0;
+	for (auto size : POOL_SIZES) {
+		for (int i = pre + 1; i <= size; ++i)
+			idx[i] = pre;
+		pre = size;
+	}
+	return idx;
+}();
+
+constexpr std::size_t ARENA_SIZE	= 2 * 1024 * 1024;
+
+
+// pool <-- arena <-- block
+
+struct free_block {
+	free_block* m_next;
+};
+
+struct arena_header {
+	int32_t m_used;
+	int32_t m_total;
+	free_block* m_free_blocks;
+
+	bool full() const noexcept {
+		return m_used == m_total;
+	}
+
+	bool empty() const noexcept {
+		return m_used == 0;
+	}
+
+	void* alloc() noexcept {
+		void* ptr = m_free_blocks;
+		m_free_blocks = m_free_blocks->m_next;
+		++m_used;
+		return ptr;
+	}
+
+	void free(void* ptr) noexcept {
+		free_block* block = convert<free_block*>(ptr);
+		block->m_next = m_free_blocks;
+		m_free_blocks = block;
+		--m_used;
+	}
+};
+
+class pool {
+public:
+	~pool() noexcept {
+		for (arena_header* arena : m_arenas)
+			destroy_arena(arena);
+		m_arenas.clear();
+		m_partials.clear();
+	}
+
+	void init(int block_size) noexcept {
+		m_block_size = block_size;
+	}
+
+	void* alloc() & noexcept {
+		// TODO: Big lock may cause performance issue
+		std::lock_guard<std::mutex> lock(m_mtx);
+
+		if (m_partials.empty()) {
+			create_arena(m_block_size);
+		}
+
+		arena_header* arena = m_partials.front();
+		void* block = arena->alloc();
+
+		if (arena->full())
+			m_partials.pop_front();
+
+		return block;
+	}
+
+	void free(void* ptr) & noexcept {
+		std::lock_guard<std::mutex> lock(m_mtx);
+
+		free_block* block = convert<free_block*>(ptr);
+
+		arena_header* arena = convert<arena_header*>(block - 1);
+		arena->free(block);
+		
+		if (arena->empty())
+			m_partials.push_front(arena);
+	}
+
+private:
+	void create_arena(std::size_t block_size) noexcept {
+		arena_header* arena = convert<arena_header*>(std::malloc(ARENA_SIZE));
+		rt_assert(arena != nullptr, "Alloc arena failed");
+
+		arena->m_used = 0;
+		arena->m_total = (ARENA_SIZE - sizeof(arena_header)) / block_size;
+		arena->m_free_blocks = nullptr;
+
+		{
+			char* buff = convert<char*>(arena + 1);
+			for (int i = 0; i < arena->m_total; ++i) {
+				free_block* block = convert<free_block*>(buff);
+				buff += m_block_size;
+				block->m_next = arena->m_free_blocks;
+				arena->m_free_blocks = block;
+			}
+		}
+
+		m_arenas.insert(arena);
+		m_partials.push_back(arena);
+	}
+
+	void destroy_arena(arena_header* arena) noexcept {
+		std::free(arena);
+
+		m_arenas.erase(arena);
+		std::erase(m_partials, arena);
+	}
+
+private:
+	std::list<arena_header*> m_partials;
+	std::set<arena_header*> m_arenas;
+	std::mutex m_mtx;
+	int m_block_size;
+};
+
+
+} // namespace
+} // namespace kh
+
+
+export namespace kh {
+
+class pool_allcoator {
+public:
+	pool_allcoator() {
+		for (auto&& [p, size] : std::views::zip(m_pools, POOL_SIZES))
+			p.init(size);
+	}
+
+	void* alloc(std::size_t size) noexcept {
+		if (size > MAX_POOL_SIZE) [[unlikely]]
+			return std::malloc(size);
+		return m_pools[SIZE_TO_POOL_IDX[size]].alloc();
+	}
+
+	void free(void* ptr, std::size_t size) noexcept {
+		if (size > MAX_POOL_SIZE) [[unlikely]] {
+			std::free(ptr);
+			return;
+		}
+		m_pools[SIZE_TO_POOL_IDX[size]].free(ptr);
+	}
+
+	void* realloc(void* ptr, std::size_t old_size, std::size_t new_size) noexcept {
+		if (new_size > MAX_POOL_SIZE) [[unlikely]]
+			return std::realloc(ptr, new_size);
+
+		if (old_size >= new_size) [[unlikely]]
+			return ptr;
+
+		void* new_ptr = m_pools[SIZE_TO_POOL_IDX[new_size]].alloc();
+		if (new_ptr) [[likely]]
+			std::memcpy(new_ptr, ptr, old_size);
+
+		if (new_ptr)
+			m_pools[SIZE_TO_POOL_IDX[old_size]].free(ptr);
+		return new_ptr;
+	}
+
+
+private:
+	std::array<pool, POOL_NUM> m_pools;
+};
+
+} // namespace kh

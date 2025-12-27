@@ -5,7 +5,7 @@
  */
 
 export module khbase:traits;
-
+import std;
 
 export namespace kh {
 
@@ -18,5 +18,8 @@ public:
 	using class_t = Cls;
 	using member_t = T;
 };
+
+template <typename T>
+concept is_pointer = std::is_pointer_v<T>;
 
 } // namespace kh
